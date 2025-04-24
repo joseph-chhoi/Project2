@@ -46,12 +46,93 @@ Use 10-fold cross-validation on the training data to estimate either
 
 ```{r}
 ## Add your code here
+long_food <- read_csv("food_data.csv", show_col_types = FALSE) |>
+  filter(!is.na(nutrient_id))            
 
+plant_groups <- c(
+  "Legumes and Legume Products", "Vegetables and Vegetable Products",
+  "Fruits and Fruit Juices", "Cereal Grains and Pasta",
+  "Nut and Seed Products", "Spices and Herbs"
+)
+
+long_food <- long_food |>
+  mutate(
+    is_plant_based = if_else(
+      description_category %in% plant_groups, "plant", "animal"
+    ),
+    is_plant_based = factor(is_plant_based, levels = c("animal", "plant"))
+  ) |> 
+  drop_na(is_plant_based)
+ids_top <- long_food |> 
+  distinct(fdc_id, nutrient_id) |>
+  count(nutrient_id, sort = TRUE) |> 
+  slice_head(n = 50) |> 
+  pull(nutrient_id)
+wide_food <- long_food |> 
+  filter(nutrient_id %in% ids_top) |> 
+  pivot_wider(
+    id_cols      = c(fdc_id, is_plant_based),
+    names_from   = nutrient_id,
+    names_prefix = "n",
+    values_from  = amount,
+    values_fill  = 0                     
+  )
+
+set.seed(123)
+split_data <- initial_split(food_wide, prop = 0.75, strata = is_plant_based)
+train_data <- training(data_split)
+test_data  <- testing(data_split)
+
+recnet <- recipe(is_plant_based ~ ., data = data_train) |> 
+  update_role(fdc_id, new_role = "ID") |> 
+  step_zv(all_numeric_predictors()) |>      
+  step_normalize(all_numeric_predictors())
+
+specenet <- logistic_reg(
+    penalty = tune(),
+    mixture = tune()
+  ) |> 
+  set_engine("glmnet") |> 
+  set_mode("classification")
+
+wf_enet <- workflow() |> 
+  add_recipe(recnet) |>
+  add_model(specenet)
+set.seed(123)
+folded_cv <- vfold_cv(train_data, v = 10, strata = is_plant_based)
+
+grid_lambda <- grid_regular(
+  penalty(range = c(-4, 0)),  
+  mixture(range = c(0, 1)),   
+  levels = 5
+)
+
+set.seed(123)
+recnet <- tune_grid(
+  wf_enet,
+  resamples = folded_cv,
+  grid      = grid_lambda,
+  metrics   = metric_set(accuracy, roc_auc),
+  control   = control_grid(save_pred = TRUE)
+)
+
+collect_metrics(recnet) %>% arrange(desc(mean))
+
+best_recnet <- select_best(recnet, metric = "roc_auc")
+wf_final <- finalize_workflow(wf_enet, best_recnet)
+
+set.seed(123)
+res_test <- last_fit(wf_final, split_data)
+collect_metrics(res_test)
+
+library(vip)
+fit_final <- extract_fit_parsnip(res_test$.workflow[[1]])
+vip(fit_final, num_features = 20)
 ```
 
 Which configuration of variables in your model seems to produce the best performing model on the training data?
 
-**Write your answer here.**
+**In this model, variables that produce the best performing model on the training data include n1253, n1263, n1262, n1102, and n1264.**
 
 
 
