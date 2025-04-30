@@ -46,9 +46,11 @@ Use 10-fold cross-validation on the training data to estimate either
 
 ```{r}
 ## Add your code here
+# Read the raw table and drop blank nutrient_id rows
 long_food <- read_csv("food_data.csv", show_col_types = FALSE) |>
   filter(!is.na(nutrient_id))            
 
+# generate binary outcomes
 plant_groups <- c(
   "Legumes and Legume Products", "Vegetables and Vegetable Products",
   "Fruits and Fruit Juices", "Cereal Grains and Pasta",
@@ -63,11 +65,15 @@ long_food <- long_food |>
     is_plant_based = factor(is_plant_based, levels = c("animal", "plant"))
   ) |> 
   drop_na(is_plant_based)
+
+# choose the frequently measured nutrient IDs
 ids_top <- long_food |> 
   distinct(fdc_id, nutrient_id) |>
   count(nutrient_id, sort = TRUE) |> 
   slice_head(n = 50) |> 
   pull(nutrient_id)
+
+# fill missing amounts with 0
 wide_food <- long_food |> 
   filter(nutrient_id %in% ids_top) |> 
   pivot_wider(
@@ -78,16 +84,19 @@ wide_food <- long_food |>
     values_fill  = 0                     
   )
 
+# divide the data 75% & 25%
 set.seed(123)
 split_data <- initial_split(food_wide, prop = 0.75, strata = is_plant_based)
 train_data <- training(data_split)
 test_data  <- testing(data_split)
 
+# drop zero-variance columns
 recnet <- recipe(is_plant_based ~ ., data = data_train) |> 
   update_role(fdc_id, new_role = "ID") |> 
   step_zv(all_numeric_predictors()) |>      
   step_normalize(all_numeric_predictors())
 
+# elastic / net logistic model
 specenet <- logistic_reg(
     penalty = tune(),
     mixture = tune()
@@ -107,6 +116,7 @@ grid_lambda <- grid_regular(
   levels = 5
 )
 
+# cross validation and grid search
 set.seed(123)
 recnet <- tune_grid(
   wf_enet,
@@ -118,13 +128,17 @@ recnet <- tune_grid(
 
 collect_metrics(recnet) %>% arrange(desc(mean))
 
+# final workflow and test set evaluation
 best_recnet <- select_best(recnet, metric = "roc_auc")
 wf_final <- finalize_workflow(wf_enet, best_recnet)
 
 set.seed(123)
 res_test <- last_fit(wf_final, split_data)
+
+# check test metrics
 collect_metrics(res_test)
 
+# the importance of variables with top nutrients
 library(vip)
 fit_final <- extract_fit_parsnip(res_test$.workflow[[1]])
 vip(fit_final, num_features = 20)
