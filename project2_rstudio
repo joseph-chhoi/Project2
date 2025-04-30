@@ -155,12 +155,68 @@ NOTE: Doing the cross-validation and model tuning here may take a *significant* 
 
 ```{r}
 ## Add your code here
+library(tidymodels)
+library(ranger)
+# Random Forest model specification
+model <- rand_forest(mtry = tune(), trees = tune(), min_n = tune()) %>%
+  set_engine("ranger") %>%
+  set_mode("classification")
 
+# Create a workflow 
+wf <- workflow() %>%
+  add_recipe(recnet) %>% 
+  add_model(model)
+
+grid_rf <- grid_regular(
+  mtry(range = c(2, 10)),
+  trees(range = c(100, 300)),
+  min_n(range = c(2, 5)),
+  levels = 2 
+)
+
+set.seed(123)
+tune_rf <- tune_grid(
+  wf,
+  resamples = folded_cv,
+  grid = grid_rf,
+  metrics = metric_set(accuracy, roc_auc),
+  control = control_grid(save_pred = TRUE)
+)
+
+collect_metrics(tune_rf) %>% arrange(desc(mean))
+
+
+# Shows the best performing Random Forest model based on ROC AUC
+rf_best <- select_best(tune_rf, metric = "roc_auc")
+rf_best
+
+# Final workflow with the best Random Forest parameters
+final_wf_rf <- finalize_workflow(wf, rf_best)
+
+# Using training folds evalulate the performance
+results_train_rf <- fit_resamples(
+  final_wf_rf,
+  resamples = folded_cv,
+  metrics = metric_set(accuracy, roc_auc)
+)
+
+collect_metrics(results_train_rf)
+
+# Choose the best performing workflow based on the cross-validation results
+
+best_workflow <- final_wf_rf
+
+# Evaluate the best workflow 
+set.seed(123)
+bestworkflow_final <- last_fit(best_workflow, split_data)
+
+# Collect the performance metrics 
+collect_metrics(bestworkflow_final)
 ```
 
 Which one of your models (i.e. which combination of tuning parameters and variables) produces the best prediction performance on the training dataset?
 
-**Write your answer here.**
+**The Random forest model with mtry = 10, trees = 100, and min_n = 2  produced the best prediction performance on the training datset with the mean ROC being 0.868 compared to the best tuned Logistic Regression Model ROC being 0.729..**
 
 
 ## Final Model Fit
@@ -199,7 +255,7 @@ Suppose you had the ability to improve the fit of the model by collecting data o
 
 Reflect on the process of conducting this project. What was challenging, what have you learned from the process itself? Was there anything that was unexpected that you found during this analysis? If so, what was your expectation and how did the experience deviate from your expectation?
 
-**Write your answer here.**
+**The challenging aspects of this project included tuning parameters such as mtry(), trees(), min_n(). In order to provide the best tuning parameter combinations, there were many trials we had to run. Adjusting the parameters slightly required precision. I expected the Rain Forest model to work better compared to the Logistic Regression model since there were nonlinear relationships between nutrient ID and whether the product is plant based on animal based. The Rain Forest model was able to analyze the relationship between the two, and shows the the nutrient ID may depend on other factors such as the way the food was produced.  **
 
 
 
