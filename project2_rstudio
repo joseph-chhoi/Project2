@@ -225,14 +225,20 @@ Choose the model that performs the best on your training dataset (either the lin
 
 
 ```{r}
-## Add your code here
+## Final Model Fit: Evaluate best model on test set
+set.seed(123)
+bestworkflow_final <- last_fit(best_workflow, split_data)
+
+## Collect performance metrics on test data
+final_metrics <- collect_metrics(bestworkflow_final)
+final_metrics
 
 ```
 
 
 What are the final performance metrics for your best model?
 
-**Write your answer here.**
+**The best-performing model is the random forest classifier with tuned parameters mtry= 10, trees= 100, and min_n= 2 with accuracy of 0.823, ROC AUC of 0.859, and brier score of 0.128.**
 
 
 
@@ -246,7 +252,7 @@ Suppose you had the ability to improve the fit of the model by collecting data o
 
 ```
 
-**Write your answer here.**
+**One valuable variable that could improve model performance is the processing method or form of the food item—such as "raw," "cooked," "dried," "powdered," or "processed." This information would help differentiate food items that might share similar nutrient compositions but originate from different sources. For instance, both plant-based protein powders and animal-based protein powders may have similar levels of protein, but their processing methods and origin types differ. Including the processing method could improve prediction performance by providing additional context to nutrient values, or helping the model resolve ambiguous cases where nutrient ID patterns overlap between plant and animal categories.**
 
 
 
